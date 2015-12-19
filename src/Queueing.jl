@@ -1,5 +1,19 @@
+isdefined(Base, :__precompile__) && __precompile__()
+
 module Queueing
 
-# package code goes here
+using Distributions, DataStructures
 
-end # module
+import Base: <, <=, ==, >=, >, isequal
+
+export
+  QueueStats,
+  QueueProperties,
+  MM1,
+  MMN,
+  SimulationArgs,
+  simulate
+
+include("single_queue.jl")
+
+end
