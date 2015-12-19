@@ -8,7 +8,7 @@ G/G/1/K
 G/G/c
 G/G/c/K
 
-The goal of this package is to enable the ability to run simulations on arbitrary queueing topologies as well as be able to estimate the performance characteristics of different queueing structures conditional on historical data. While it can also be utilized for the analysis of various queueing systems from an academic perspective, its ultimate purpose is to be able to be hooked into performance metrics data to be able to optimize scheduling algorithms in the context of distributed systems.
+The ultimate goal of this package is to enable the ability to run simulations on arbitrary queueing network topologies. Mostly it may gravitate towards enabling the analysis of the performance of complex scheduling algorithms in distributed systems, but it aims to be useful for academic purposes as well.
 
 ## Documentation
 
