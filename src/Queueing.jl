@@ -7,6 +7,7 @@ using Distributions, DataStructures
 import Base: <, <=, ==, >=, >, isequal
 
 export
+  QueueEdge,
   QueueStats,
   QueueProperties,
   MM1,
