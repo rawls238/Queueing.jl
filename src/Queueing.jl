@@ -4,7 +4,7 @@ module Queueing
 
 using Distributions, DataStructures
 
-import Base: <, <=, ==, >=, >, isequal
+import Base: <, <=, ==, >=, >, isequal, ArgumentError
 
 export
   QueueEdge,
@@ -16,6 +16,6 @@ export
   SimulationArgs,
   simulate
 
-include("single_queue.jl")
+include("queueing_system.jl")
 
 end

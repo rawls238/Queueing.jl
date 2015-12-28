@@ -1,13 +1,23 @@
 type QueueProperties
+  queue_id::Integer
   interarrival::Distribution
   service::Distribution
   num_servers::Integer
   max_capacity::Integer
+  function QueueProperties(i::Distribution, s::Distribution, servers::Integer, cap::Integer)
+    new(-1, i, s, servers, cap)
+  end
 end
 
 type QueueEdge
   to::QueueProperties
   weight::Float64
+  function QueueEdge(to::QueueProperties, weight::Float64)
+    if weight < 0 || weight > 1
+      throw(ArgumentError("weight must be between 0 and 1"))
+    end
+    new(to, weight)
+  end
 end
 
 type QueueNode
@@ -175,13 +185,31 @@ function next_birth(s::SimulationState, id::Integer)
 end
 
 # death related functions
+function possibly_exit_system(e::Event, s::SimulationState, qs::QueueStats)
+  current_queue_id = e.queue_id
+  current_queue_state = s.queue_states[current_queue_id]
+  sum = 0.0
+  r = rand()
+
+  for edge in current_queue_state.edges
+    sum += edge.weight
+    if r <= sum
+      push!(s.calendar, Event(edge.props.queue_id, "birth", e.enter_time, s.system_time, Server(-1)))
+      return
+    end
+  end
+
+  #assume here that if we find no outgoing edge in the system, then we exit the system
+  qs.total_departures = qs.total_departures + 1
+end
+
 
 function death(e::Event, s::SimulationState, qs::QueueStats)
   free_server(e, s)
   if length(s.queue_states[e.queue_id].waiting) > 0
     next_death(s, e.queue_id, qs)
   end
-  qs.total_departures = qs.total_departures + 1
+  possibly_exit_system(e, s, qs)
 end
 
 function next_death(s::SimulationState, queue_id::Integer, qs::QueueStats)
