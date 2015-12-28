@@ -40,6 +40,7 @@ type QueueEdge
 end
 
 type QueueNode
+  queue_id::Integer
   props::QueueProperties
   is_entering::Bool # Optional - defaults to true
   edges::AbstractArray{QueueEdge} # Optional

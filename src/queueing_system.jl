@@ -11,14 +11,8 @@ type QueueProperties
   end
 end
 
-type QueueNode
-  props::QueueProperties
-  is_entering::Bool
-  edges::AbstractArray
-end
-
 type QueueEdge
-  to::QueueNode
+  to::Integer
   weight::Float64
   function QueueEdge(to, weight::Float64)
     if weight < 0 || weight > 1
@@ -28,15 +22,12 @@ type QueueEdge
   end
 end
 
-==(a::QueueProperties, b::QueueProperties) = a.interarrival == b.interarrival &&
-                   a.service == b.service && a.num_servers == b.num_servers && a.max_capacity == b.max_capacity
-hash(a::QueueProperties, h::UInt) = hash(a.interarrival, hash(a.service, hash(a.num_servers, hash(a.max_capacity, h))))
-
-==(a::QueueNode, b::QueueNode) = a.props == b.props && a.is_entering == b.is_entering && a.edges == b.edges
-hash(a::QueueNode, h::UInt) = hash(a.props, hash(a.is_entering, hash(a.edges, h)))
-
-==(a::QueueEdge, b::QueueEdge) = a.to == b.to && a.weight == b.weight
-hash(a::QueueEdge, h::UInt) = hash(a.to, hash(weight, h))
+type QueueNode
+  queue_id::Integer
+  props::QueueProperties
+  is_entering::Bool
+  edges::AbstractArray{QueueEdge}
+end
 
 type SimulationArgs
   max_time::Float64
@@ -99,22 +90,14 @@ end
 
 function initialize_system(args::SimulationArgs)
   queue_states = []
-  queue_systems = Dict{QueueNode, QueueNode}()
   entering_queue_ids = []
   for i in 1:length(args.topology)
     cur = args.topology[i]
     if cur.is_entering
       push!(entering_queue_ids, i)
     end
-    cur.props.queue_id = i
-    queue_systems[cur] = cur
-  end
-
-  for queue in queue_systems
-    for j in 1:length(queue.first.edges)
-      queue.first.edges[j].to = queue_systems[queue.first.edges[j].to]
-    end
-    push!(queue_states, SingleQueueState(queue.first.props.queue_id, Dict{Server, Any}(), queue.first.props, queue.first.edges, Queue(Event), 0))
+    cur.props.queue_id = cur.queue_id
+    push!(queue_states, SingleQueueState(cur.queue_id, Dict{Server, Any}(), cur.props, cur.edges, Queue(Event), 0))
   end
 
   state = SimulationState(mutable_binary_minheap(Event), Event(1, "", 0, 0, Server(0)), 0, entering_queue_ids, queue_states)
@@ -215,7 +198,7 @@ function possibly_exit_system(e::Event, s::SimulationState, qs::QueueStats)
   for edge in current_queue_state.edges
     sum += edge.weight
     if r <= sum
-      push!(s.calendar, Event(edge.to.props.queue_id, "birth", e.enter_time, s.system_time, Server(-1)))
+      push!(s.calendar, Event(edge.to, "birth", e.enter_time, s.system_time, Server(-1)))
       return
     end
   end
