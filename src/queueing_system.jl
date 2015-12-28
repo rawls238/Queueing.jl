@@ -1,3 +1,5 @@
+# Exported types
+
 type QueueProperties
   queue_id::Integer
   interarrival::Distribution
@@ -9,10 +11,16 @@ type QueueProperties
   end
 end
 
+type QueueNode
+  props::QueueProperties
+  is_entering::Bool
+  edges::AbstractArray
+end
+
 type QueueEdge
-  to::QueueProperties
+  to::QueueNode
   weight::Float64
-  function QueueEdge(to::QueueProperties, weight::Float64)
+  function QueueEdge(to, weight::Float64)
     if weight < 0 || weight > 1
       throw(ArgumentError("weight must be between 0 and 1"))
     end
@@ -20,13 +28,20 @@ type QueueEdge
   end
 end
 
-type QueueNode
-  props::QueueProperties
-  is_entering::Bool
-  edges::AbstractArray{QueueEdge}
-  function QueueNode(properties::QueueProperties)
-    new(properties, true, [])
-  end
+==(a::QueueProperties, b::QueueProperties) = a.interarrival == b.interarrival &&
+                   a.service == b.service && a.num_servers == b.num_servers && a.max_capacity == b.max_capacity
+hash(a::QueueProperties, h::UInt) = hash(a.interarrival, hash(a.service, hash(a.num_servers, hash(a.max_capacity, h))))
+
+==(a::QueueNode, b::QueueNode) = a.props == b.props && a.is_entering == b.is_entering && a.edges == b.edges
+hash(a::QueueNode, h::UInt) = hash(a.props, hash(a.is_entering, hash(a.edges, h)))
+
+==(a::QueueEdge, b::QueueEdge) = a.to == b.to && a.weight == b.weight
+hash(a::QueueEdge, h::UInt) = hash(a.to, hash(weight, h))
+
+type SimulationArgs
+  max_time::Float64
+  max_customers::Float64
+  topology::AbstractArray{QueueNode}
 end
 
 type QueueStats
@@ -43,11 +58,7 @@ type QueueStats
   end
 end
 
-type SimulationArgs
-  max_time::Float64
-  max_customers::Float64
-  topology::AbstractArray{QueueNode}
-end
+# Implementation types
 
 type Server
   id::Integer
@@ -88,14 +99,24 @@ end
 
 function initialize_system(args::SimulationArgs)
   queue_states = []
+  queue_systems = Dict{QueueNode, QueueNode}()
   entering_queue_ids = []
   for i in 1:length(args.topology)
     cur = args.topology[i]
     if cur.is_entering
       push!(entering_queue_ids, i)
     end
-    push!(queue_states, SingleQueueState(i, Dict{Server, Any}(), cur.props, cur.edges, Queue(Event), 0))
+    cur.props.queue_id = i
+    queue_systems[cur] = cur
   end
+
+  for queue in queue_systems
+    for j in 1:length(queue.first.edges)
+      queue.first.edges[j].to = queue_systems[queue.first.edges[j].to]
+    end
+    push!(queue_states, SingleQueueState(queue.first.props.queue_id, Dict{Server, Any}(), queue.first.props, queue.first.edges, Queue(Event), 0))
+  end
+
   state = SimulationState(mutable_binary_minheap(Event), Event(1, "", 0, 0, Server(0)), 0, entering_queue_ids, queue_states)
   initialize_servers(state)
   return state
@@ -194,7 +215,7 @@ function possibly_exit_system(e::Event, s::SimulationState, qs::QueueStats)
   for edge in current_queue_state.edges
     sum += edge.weight
     if r <= sum
-      push!(s.calendar, Event(edge.props.queue_id, "birth", e.enter_time, s.system_time, Server(-1)))
+      push!(s.calendar, Event(edge.to.props.queue_id, "birth", e.enter_time, s.system_time, Server(-1)))
       return
     end
   end
@@ -230,7 +251,7 @@ end
 # monitoring
 
 function next_monitoring(s::SimulationState)
-  next_time = s.system_time + rand(Exponential(1))
+  next_time = s.system_time + rand(Exponential(10))
   push!(s.calendar, Event(1, "monitoring", next_time, next_time, Server(-1)))
 end
 
@@ -259,5 +280,5 @@ end
 
 # convenience functions
 
-MM1(λ::Integer, μ::Integer, time::Integer) = simulate(SimulationArgs(time, 0, [QueueNode(QueueProperties(Exponential(1/λ), Exponential(1/μ), 1, -1))]))
-MMN(λ::Integer, μ::Integer, servers::Integer, time::Integer) = simulate(SimulationArgs(time, 0, [QueueNode(QueueProperties(Exponential(1/λ), Exponential(1/μ), servers, -1))]))
+MM1(λ::Integer, μ::Integer, time::Integer) = simulate(SimulationArgs(time, 0, [QueueNode(QueueProperties(Exponential(1/λ), Exponential(1/μ), 1, -1), true, [])]))
+MMN(λ::Integer, μ::Integer, servers::Integer, time::Integer) = simulate(SimulationArgs(time, 0, [QueueNode(QueueProperties(Exponential(1/λ), Exponential(1/μ), servers, -1), true, [])]))
