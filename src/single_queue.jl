@@ -1,9 +1,22 @@
 type QueueProperties
-  queue_id::Integer
   interarrival::Distribution
   service::Distribution
   num_servers::Integer
   max_capacity::Integer
+end
+
+type QueueEdge
+  to::QueueProperties
+  weight::Float64
+end
+
+type QueueNode
+  props::QueueProperties
+  is_entering::Bool
+  edges::AbstractArray{QueueEdge}
+  function QueueNode(properties::QueueProperties)
+    new(properties, true, [])
+  end
 end
 
 type QueueStats
@@ -20,16 +33,10 @@ type QueueStats
   end
 end
 
-type QueueEdge
-  from::QueueProperties
-  to::QueueProperties
-  weight::Float64
-end
-
 type SimulationArgs
   max_time::Float64
   max_customers::Float64
-  topology::AbstractArray{Any}
+  topology::AbstractArray{QueueNode}
 end
 
 type Server
@@ -44,21 +51,21 @@ type Event
   server::Server
 end
 
-type SimulationState
-  calendar::MutableBinaryHeap{Event}
-  current_event::Event
-  system_time::Float64
+type SingleQueueState
+  queue_id::Integer
   server_state::Dict{Server, Any}
-  topology::AbstractArray{Any}
+  props::QueueProperties
+  edges::AbstractArray{QueueEdge}
   waiting::Queue
   num_currently_being_served::Integer
 end
 
-type SingleQueueState
-  server_state::Dict{Server, Any}
-  distributions::QueueProperties
-  waiting::Queue
-  num_currently_being_served::Integer
+type SimulationState
+  calendar::MutableBinaryHeap{Event}
+  current_event::Event
+  system_time::Float64
+  entering_queue_ids::AbstractArray{Integer}
+  queue_states::AbstractArray{SingleQueueState}
 end
 
 <=(a::Event, b::Event) = a.scheduled_time <= b.scheduled_time
@@ -70,13 +77,24 @@ end
 # Initialization functions
 
 function initialize_system(args::SimulationArgs)
-  state = SimulationState(mutable_binary_minheap(Event), Event(1, "", 0, 0, Server(0)), 0, Dict{Server, Any}(), args.topology, Queue(Event), 0)
+  queue_states = []
+  entering_queue_ids = []
+  for i in 1:length(args.topology)
+    cur = args.topology[i]
+    if cur.is_entering
+      push!(entering_queue_ids, i)
+    end
+    push!(queue_states, SingleQueueState(i, Dict{Server, Any}(), cur.props, cur.edges, Queue(Event), 0))
+  end
+  state = SimulationState(mutable_binary_minheap(Event), Event(1, "", 0, 0, Server(0)), 0, entering_queue_ids, queue_states)
   initialize_servers(state)
   return state
 end
 
 function schedule_initial_events(state::SimulationState)
-  next_birth(state)
+  for queue_id in state.entering_queue_ids
+    next_birth(state, queue_id)
+  end
   next_monitoring(state)
 end
 
@@ -88,13 +106,18 @@ function should_continue_simulation(state::SimulationState, args::SimulationArgs
   return stop_from_time || stop_from_customers
 end
 
+function system_at_capacity(s::SimulationState, id::Integer)
+  c = s.queue_states[id]
+  return c.props.max_capacity <= 0 || ((length(c.waiting) + c.num_currently_being_served) < c.props.max_capacity)
+end
+
 function handle_event(e::Event, s::SimulationState, qs::QueueStats)
   s.system_time = e.scheduled_time
   if e.event_type == "birth"
-    if head(s.topology[1]).from.max_capacity <= 0 || ((length(s.waiting) + s.num_currently_being_served) < head(s.topology[1]).from.max_capacity)
+    if system_at_capacity(s, e.queue_id)
       return birth(e, s, qs)
     else
-      return next_birth(s)
+      return next_birth(s, e.queue_id)
     end
   elseif e.event_type == "death"
     return death(e, s, qs)
@@ -106,15 +129,15 @@ end
 # Server related functions
 
 function initialize_servers(s::SimulationState)
-  for queue in s.topology
-    for j in 1:length(head(queue).from.num_servers)
-      s.server_state[Server(j)] = null
+  for queue in s.queue_states
+    for j in 1:queue.props.num_servers
+      queue.server_state[Server(j)] = null
     end
   end
 end
 
-function find_server(s::SimulationState)
-  for (k, v) in s.server_state
+function find_server(s::SimulationState, queue_id::Integer)
+  for (k, v) in s.queue_states[queue_id].server_state
     if v == null
       return k
     end
@@ -124,44 +147,48 @@ end
 
 
 function free_server(e::Event, s::SimulationState)
-  s.server_state[e.server] = null
-  s.num_currently_being_served -= 1
+  s.queue_states[e.queue_id].server_state[e.server] = null
+  s.queue_states[e.queue_id].num_currently_being_served -= 1
 end
 
 function allocate_server(e::Event, server::Server, state::SimulationState)
-  state.server_state[server] = true
-  state.num_currently_being_served += 1
+  state.queue_states[e.queue_id].server_state[server] = true
+  state.queue_states[e.queue_id].num_currently_being_served += 1
 end
 
 # birth related functions
 
 function birth(e::Event, s::SimulationState, qs::QueueStats)
-    enqueue!(s.waiting, e)
-    if find_server(s) != null
-      next_death(s, qs)
+    enqueue!(s.queue_states[e.queue_id].waiting, e)
+    queue_id = e.queue_id
+    if find_server(s, queue_id) != null
+      next_death(s, queue_id, qs)
     end
-    next_birth(s)
+    next_birth(s, queue_id)
 end
 
-function next_birth(s::SimulationState)
-  next_time = s.system_time + rand(head(s.topology[1]).from.interarrival)
-  push!(s.calendar, Event(1, "birth", next_time, next_time, Server(-1)))
+function next_birth(s::SimulationState, id::Integer)
+  if id ∈ s.entering_queue_ids
+    next_time = s.system_time + rand(s.queue_states[id].props.interarrival)
+    push!(s.calendar, Event(id, "birth", next_time, next_time, Server(-1)))
+  end
 end
 
 # death related functions
 
 function death(e::Event, s::SimulationState, qs::QueueStats)
   free_server(e, s)
-  qs.total_departures = qs.total_departures + 1
-  if length(s.waiting) > 0
-    next_death(s, qs)
+  if length(s.queue_states[e.queue_id].waiting) > 0
+    next_death(s, e.queue_id, qs)
   end
+  qs.total_departures = qs.total_departures + 1
 end
 
-function next_death(s::SimulationState, qs::QueueStats)
-  e = dequeue!(s.waiting)
-  server = find_server(s)
-  next_time = s.system_time + rand(head(s.topology[e.queue_id]).from.service)
+function next_death(s::SimulationState, queue_id::Integer, qs::QueueStats)
+  current_queue_state = s.queue_states[queue_id]
+  e = dequeue!(current_queue_state.waiting)
+  server = find_server(s, queue_id)
+  next_time = s.system_time + rand(current_queue_state.props.service)
   qs.total_wait_time = qs.total_wait_time + s.system_time - e.enter_time
   allocate_server(e, server, s)
   e.server = server
@@ -180,9 +207,11 @@ function next_monitoring(s::SimulationState)
 end
 
 function monitoring(s::SimulationState, qs::QueueStats)
-  num_waiting = length(s.waiting)
-  qs.total_num_waiting = num_waiting
-  qs.num_in_system = num_waiting + s.num_currently_being_served
+  for queue in s.queue_states
+    num_waiting = length(queue.waiting)
+    qs.total_num_waiting += num_waiting
+    qs.num_in_system += num_waiting + queue.num_currently_being_served
+  end
   qs.num_monitors = qs.num_monitors + 1
   next_monitoring(s)
 end
@@ -202,5 +231,5 @@ end
 
 # convenience functions
 
-MM1(λ::Integer, μ::Integer, time::Integer) = simulate(SimulationArgs(time, 0, [list(QueueEdge(QueueProperties(0, Exponential(1/λ), Exponential(1/μ), 1, -1), QueueProperties(0, Exponential(1/λ), Exponential(1/μ), 1, -1), 0))]))
-MMN(λ::Integer, μ::Integer, servers::Integer, time::Integer) = simulate(SimulationArgs(time, 0, [list(QueueEdge(QueueProperties(0, Exponential(1/λ), Exponential(1/μ), servers, -1), QueueProperties(0, Exponential(1/λ), Exponential(1/μ), servers, -1), 1, -1))]))
+MM1(λ::Integer, μ::Integer, time::Integer) = simulate(SimulationArgs(time, 0, [QueueNode(QueueProperties(Exponential(1/λ), Exponential(1/μ), 1, -1))]))
+MMN(λ::Integer, μ::Integer, servers::Integer, time::Integer) = simulate(SimulationArgs(time, 0, [QueueNode(QueueProperties(Exponential(1/λ), Exponential(1/μ), servers, -1))]))

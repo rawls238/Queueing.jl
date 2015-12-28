@@ -8,6 +8,7 @@ import Base: <, <=, ==, >=, >, isequal
 
 export
   QueueEdge,
+  QueueNode,
   QueueStats,
   QueueProperties,
   MM1,
