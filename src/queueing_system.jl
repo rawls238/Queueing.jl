@@ -6,17 +6,17 @@ type QueueProperties
   service::Distribution
   num_servers::Integer
   max_capacity::Integer
-  function QueueProperties(i::Distribution, s::Distribution, servers::Integer, cap::Integer)
-    new(-1, i, s, servers, cap)
-  end
 end
+
+QueueProperties(i::Distribution, s::Distribution, servers::Integer, cap::Integer) = QueueProperties(-1, i, s, servers, cap)
+QueueProperties(i::Distribution, s::Distribution, servers::Integer) = QueueProperties(-1, i, s, servers, -1)
 
 type QueueEdge
   to::Integer
   weight::Float64
   function QueueEdge(to, weight::Float64)
     if weight < 0 || weight > 1
-      throw(ArgumentError("weight must be between 0 and 1"))
+      throw(ArgumentError(string("weight must be between 0 and 1")))
     end
     new(to, weight)
   end
@@ -28,6 +28,7 @@ type QueueNode
   is_entering::Bool
   edges::AbstractArray{QueueEdge}
 end
+QueueNode(id::Integer, props::QueueProperties) = QueueNode(id, props, true, Array{QueueEdge}())
 
 type SimulationArgs
   max_time::Float64
@@ -44,10 +45,9 @@ type QueueStats
   num_monitors::Integer
   average_wait_time::Float64
   average_system_time::Float64
-  function QueueStats()
-    new(0, 0, 0, 0, 0, 0, 0, 0)
-  end
 end
+
+QueueStats() = QueueStats(0, 0, 0, 0, 0, 0, 0, 0)
 
 # Implementation types
 
@@ -58,10 +58,12 @@ end
 type Event
   queue_id::Integer
   event_type::String
-  enter_time::Float64
+  enter_times::AbstractArray{Float64}
   scheduled_time::Float64
   server::Server
 end
+
+Event(a::Integer, b::String, c::Float64, d::Float64, e::Server) = Event(a, b, [c], d, e)
 
 type SingleQueueState
   queue_id::Integer
@@ -100,7 +102,7 @@ function initialize_system(args::SimulationArgs)
     push!(queue_states, SingleQueueState(cur.queue_id, Dict{Server, Any}(), cur.props, cur.edges, Queue(Event), 0))
   end
 
-  state = SimulationState(mutable_binary_minheap(Event), Event(1, "", 0, 0, Server(0)), 0, entering_queue_ids, queue_states)
+  state = SimulationState(mutable_binary_minheap(Event), Event(1, "", [0.0], 0, Server(0)), 0, entering_queue_ids, queue_states)
   initialize_servers(state)
   return state
 end
@@ -145,14 +147,14 @@ end
 function initialize_servers(s::SimulationState)
   for queue in s.queue_states
     for j in 1:queue.props.num_servers
-      queue.server_state[Server(j)] = null
+      queue.server_state[Server(j)] = false
     end
   end
 end
 
 function find_server(s::SimulationState, queue_id::Integer)
   for (k, v) in s.queue_states[queue_id].server_state
-    if v == null
+    if v == false
       return k
     end
   end
@@ -161,12 +163,12 @@ end
 
 
 function free_server(e::Event, s::SimulationState)
-  s.queue_states[e.queue_id].server_state[e.server] = null
+  s.queue_states[e.queue_id].server_state[e.server] = false
   s.queue_states[e.queue_id].num_currently_being_served -= 1
 end
 
 function allocate_server(e::Event, server::Server, state::SimulationState)
-  state.queue_states[e.queue_id].server_state[server] = true
+  state.queue_states[e.queue_id].server_state[server] = e
   state.queue_states[e.queue_id].num_currently_being_served += 1
 end
 
@@ -198,12 +200,14 @@ function possibly_exit_system(e::Event, s::SimulationState, qs::QueueStats)
   for edge in current_queue_state.edges
     sum += edge.weight
     if r <= sum
-      push!(s.calendar, Event(edge.to, "birth", e.enter_time, s.system_time, Server(-1)))
+      push!(e.enter_times, s.system_time)
+      push!(s.calendar, Event(edge.to, "birth", e.enter_times, s.system_time, Server(-1)))
       return
     end
   end
 
   #assume here that if we find no outgoing edge in the system, then we exit the system
+  qs.total_system_time = qs.total_system_time + s.system_time - first(e.enter_times)
   qs.total_departures = qs.total_departures + 1
 end
 
@@ -221,14 +225,12 @@ function next_death(s::SimulationState, queue_id::Integer, qs::QueueStats)
   e = dequeue!(current_queue_state.waiting)
   server = find_server(s, queue_id)
   next_time = s.system_time + rand(current_queue_state.props.service)
-  qs.total_wait_time = qs.total_wait_time + s.system_time - e.enter_time
+  qs.total_wait_time = qs.total_wait_time + s.system_time - last(e.enter_times)
   allocate_server(e, server, s)
   e.server = server
   e.scheduled_time = next_time
   e.event_type = "death"
   push!(s.calendar, e)
-  system_time = next_time - e.enter_time
-  qs.total_system_time = qs.total_system_time + system_time
 end
 
 # monitoring
@@ -263,5 +265,5 @@ end
 
 # convenience functions
 
-MM1(λ::Integer, μ::Integer, time::Integer) = simulate(SimulationArgs(time, 0, [QueueNode(QueueProperties(Exponential(1/λ), Exponential(1/μ), 1, -1), true, [])]))
-MMN(λ::Integer, μ::Integer, servers::Integer, time::Integer) = simulate(SimulationArgs(time, 0, [QueueNode(QueueProperties(Exponential(1/λ), Exponential(1/μ), servers, -1), true, [])]))
+MM1(λ::Integer, μ::Integer, time::Integer) = simulate(SimulationArgs(time, 0, [QueueNode(1, QueueProperties(Exponential(1/λ), Exponential(1/μ), 1, -1), true, [])]))
+MMN(λ::Integer, μ::Integer, servers::Integer, time::Integer) = simulate(SimulationArgs(time, 0, [QueueNode(1, QueueProperties(Exponential(1/λ), Exponential(1/μ), servers, -1), true, [])]))

@@ -66,8 +66,7 @@ end
 
 As well, there are a few convenience functions for common queueing systems that are provided:
 
-MM1
-
-MMN
+* MM1
+* MMN
 
 License: MIT
