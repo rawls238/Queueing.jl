@@ -2,8 +2,7 @@ This package provides tools for simulation of birth and death based Markovian Qu
 
 ## Documentation
 
-This package exports a core ```simulate``` function which takes a ```SimulationArgs``` type as input
-which is defined as follows:
+This package exports a core ```simulate``` function which takes a ```SimulationArgs``` type as input which is defined as follows:
 
 ```julia
 type SimulationArgs
@@ -12,6 +11,8 @@ type SimulationArgs
   topology::AbstractArray{QueueNode}
 end
 ```
+It also exports an ```aggregage_simulate``` function which aggregates the results of N simulations run in parallel.
+
 
 ```QueueNode``` contains two intermediary types, one which holds the properties of the queueing system
 and another which contains an array of edges that dictates what other queueing systems items that exit this queue should be sent to. The weights are values from ```0 <= x <= 1``` and if the item is not sent to another queueing system, it is assumed that it exits the system. The ```is_entering``` flag indicates whether or not external items can enter into this system.

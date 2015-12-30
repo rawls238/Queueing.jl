@@ -20,6 +20,8 @@ N = (ρ*(1-(K+1)*ρ^K + K*ρ^(K+1))) / ((1-ρ)*(1-ρ^(K+1)))
 expected_total_time = N / (λ*λ_1)
 results = simulate(a)
 @test_approx_eq_eps expected_total_time results.average_system_time 0.05
+agg_results = aggregate_simulate(a, 5)
+@test_approx_eq_eps expected_total_time agg_results.average_system_time 0.05
 
 props = QueueProperties(Exponential(1/λ), Exponential(1/μ), 1, -1)
 prob = 0.5

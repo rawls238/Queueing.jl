@@ -14,6 +14,7 @@ export
   MM1,
   MMN,
   SimulationArgs,
+  aggregate_simulate,
   simulate
 
 include("queueing_system.jl")

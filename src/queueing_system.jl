@@ -37,17 +37,22 @@ type SimulationArgs
 end
 
 type QueueStats
-  num_in_system::Integer
-  total_num_waiting::Integer
-  total_departures::Integer
+  num_in_system::Float64
+  total_num_waiting::Float64
+  total_departures::Float64
   total_wait_time::Float64
   total_system_time::Float64
-  num_monitors::Integer
+  num_monitors::Float64
   average_wait_time::Float64
   average_system_time::Float64
 end
 
 QueueStats() = QueueStats(0, 0, 0, 0, 0, 0, 0, 0)
++(a::QueueStats, b::QueueStats) = QueueStats(a.num_in_system + b.num_in_system, a.total_num_waiting + b.total_num_waiting, a.total_departures + b.total_departures,
+                                  a.total_wait_time + b.total_wait_time, a.total_system_time + b.total_system_time, a.num_monitors + b.num_monitors,
+                                  a.average_wait_time + b.average_wait_time, a.average_system_time + b.average_system_time)
+/(a::QueueStats, b::Integer) = QueueStats(a.num_in_system / b, a.total_num_waiting / b, a.total_departures / b, a.total_wait_time / b, a.total_system_time / b, a.num_monitors / b, a.average_wait_time / b, a.average_system_time / b)
+
 
 # Implementation types
 
@@ -261,6 +266,13 @@ function simulate(args::SimulationArgs)
   qs.average_wait_time = qs.total_wait_time / qs.total_departures
   qs.average_system_time = qs.total_system_time / qs.total_departures
   return qs
+end
+
+function aggregate_simulate(args::SimulationArgs, n::Integer)
+  qs = @parallel (+) for i=1:n
+    simulate(args)
+  end
+  return qs / n
 end
 
 # convenience functions
