@@ -1,14 +1,4 @@
-This package provides tools for analysis of birth and death based Markovian Queueing Models
-
-
-Queueing Systems currently implemented:
-
-G/G/1
-G/G/1/K
-G/G/c
-G/G/c/K
-
-The ultimate goal of this package is to enable the ability to run simulations on arbitrary queueing network topologies. Mostly it may gravitate towards enabling the analysis of the performance of complex scheduling algorithms in distributed systems, but it aims to be useful for academic purposes as well.
+This package provides tools for simulation of birth and death based Markovian Queueing Models / Networks.
 
 ## Documentation
 
