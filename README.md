@@ -11,7 +11,7 @@ type SimulationArgs
   topology::AbstractArray{QueueNode}
 end
 ```
-It also exports an ```aggregage_simulate``` function which aggregates the results of N simulations run in parallel.
+It also exports an ```aggregate_simulate``` function which aggregates the results of N simulations run in parallel.
 
 
 ```QueueNode``` contains two intermediary types, one which holds the properties of the queueing system
