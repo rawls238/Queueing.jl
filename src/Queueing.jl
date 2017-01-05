@@ -4,7 +4,7 @@ module Queueing
 
 using Distributions, DataStructures
 
-import Base: <, <=, ==, >=, >, isequal, ArgumentError
+import Base: <, <=, ==, >=, >, /, +, isequal, ArgumentError
 
 export
   QueueEdge,

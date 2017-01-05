@@ -163,7 +163,7 @@ function find_server(s::SimulationState, queue_id::Integer)
       return k
     end
   end
-  return null
+  return false
 end
 
 
@@ -182,7 +182,7 @@ end
 function birth(e::Event, s::SimulationState, qs::QueueStats)
     enqueue!(s.queue_states[e.queue_id].waiting, e)
     queue_id = e.queue_id
-    if find_server(s, queue_id) != null
+    if find_server(s, queue_id) != false
       next_death(s, queue_id, qs)
     end
     next_birth(s, queue_id)
