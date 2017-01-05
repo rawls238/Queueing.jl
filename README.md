@@ -1,3 +1,7 @@
+[![Build Status](https://travis-ci.org/rawls238/Queueing.jl.svg?branch=master)](https://travis-ci.org/rawls238/Queueing.jl)
+[![Queueing](http://pkg.julialang.org/badges/Queueing_0.4.svg)](http://pkg.julialang.org/?pkg=Queueing&ver=0.4)
+[![Queueing](http://pkg.julialang.org/badges/Queueing_0.5.svg)](http://pkg.julialang.org/?pkg=Queueing&ver=0.5)
+
 This package provides tools for simulation of birth and death based Markovian Queueing Models / Networks.
 
 ## Documentation
